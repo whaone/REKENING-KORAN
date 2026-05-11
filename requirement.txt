@@ -5,3 +5,5 @@ celery[redis]
 redis
 django-environ
 django-filter
+pandas
+openpyxl

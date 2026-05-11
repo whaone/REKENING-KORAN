@@ -340,20 +340,23 @@ Membangun sistem rekening koran enterprise yang:
 
 ---
 
-# 📌 REPOSITORY STRUCTURE (RECOMMENDED)
+# 📌 REPOSITORY STRUCTURE
 
 ```
-project-root/
-│
-├── auth-service/
-├── bank-fetcher-service/
-├── parser-service/
-├── transaction-service/
-├── analytics-service/
-├── worker-orchestrator/
-├── admin-panel/
-│
-├── docs/
-├── infrastructure/
-└── docker-compose.yml
-```
+rekening-koran-pro/
+├── .github/workflows/      # CI/CD (AI-A)
+├── apps/
+│   ├── authentication/     # AI-B: Auth & RBAC
+│   ├── banks/              # AI-C: Bank & Account Management
+│   ├── transactions/       # AI-C: Core Transaction Processing
+│   ├── parsers/            # AI-D: File Parsing Logic
+│   ├── automation/         # AI-E/F: Celery Tasks & Fetchers
+│   └── analytics/          # AI-G: Summaries & Anomalies
+├── config/                 # Django Settings & WSGI/ASGI
+├── core/                   # Abstract models, utils, exceptions
+├── docker/                 # Dockerfiles & scripts
+├── storage/                # Local storage for MinIO simulation
+├── .env.example
+├── docker-compose.yml      # Infrastructure orchestration
+├── manage.py
+└── requirements.txt

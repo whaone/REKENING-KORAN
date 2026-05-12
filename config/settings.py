@@ -17,8 +17,8 @@ INSTALLED_APPS = [
     'rest_framework',
     'apps.authentication',
     'apps.banks',
-    'apps.transactions',
     'apps.parsers',
+    'apps.transactions',
 ]
 
 MIDDLEWARE = [
@@ -34,7 +34,7 @@ MIDDLEWARE = [
 ROOT_URLCONF = 'config.urls'
 
 # Custom User Model (AI-B) [cite: 31, 50]
-AUTH_USER_MODEL = 'authentication.User'
+# AUTH_USER_MODEL = 'authentication.User'
 
 # Database Configuration (AI-A) 
 DATABASES = {
@@ -55,3 +55,19 @@ CELERY_TASK_SERIALIZER = 'json'
 
 STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
+]

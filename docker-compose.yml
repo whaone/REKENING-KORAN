@@ -18,7 +18,9 @@ services:
       - "6379:6379"
 
   web:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: rk_api
     command: python manage.py runserver 0.0.0.0:8000
     volumes:
@@ -33,7 +35,9 @@ services:
       - redis
 
   worker:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: rk_worker
     command: celery -A config worker --loglevel=info
     volumes:

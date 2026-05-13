@@ -1,46 +1,86 @@
+import os
+import uuid
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status
-from rest_framework.parsers import MultiPartParser
-from django.shortcuts import get_object_or_404
-
-from apps.banks.models import BankAccount
-from apps.parsers.adapters.bca_parser import BCACSVParser
-from apps.parsers.services import TransactionParserService
+from rest_framework import status, permissions
+from .models import TransactionImportJob
+from .tasks import process_transaction_file
+from rest_framework.generics import ListAPIView
+from rest_framework.pagination import PageNumberPagination
+from .models import BankTransaction
+from .serializers import BankTransactionSerializer
 
 class TransactionUploadView(APIView):
-    # Atribut ini sudah cukup, tidak perlu import decorator parser_classes
-    parser_classes = [MultiPartParser] 
+    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
-        serializer = TransactionUploadSerializer(data=request.data)
+        bank_code = request.data.get('bank_code')
+        file_obj = request.FILES.get('file')
+
+        if not bank_code or not file_obj:
+            return Response(
+                {"error": "bank_code dan file wajib diisi."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 1. Simpan file ke direktori sementara
+        # Gunakan UUID agar nama file tidak bentrok jika banyak user upload bersamaan
+        file_ext = os.path.splitext(file_obj.name)[1]
+        temp_file_name = f"upload_{uuid.uuid4()}{file_ext}"
+        path = default_storage.save(f'tmp/uploads/{temp_file_name}', ContentFile(file_obj.read()))
+        full_path = os.path.join(default_storage.location, path)
+
+        # 2. Buat Record Job di Database
+        job = TransactionImportJob.objects.create(
+            user=request.user,
+            bank_code=bank_code,
+            file_name=file_obj.name,
+            file_path=full_path,
+            status='PENDING'
+        )
+
+        # 3. Pemicu Celery Task (Kirim ID saja, biarkan worker yang kerja berat)
+        process_transaction_file.delay(job.id)
+
+        return Response({
+            "message": "File diterima dan sedang diproses.",
+            "job_id": job.id,
+            "status": job.status
+        }, status=status.HTTP_202_ACCEPTED)
+
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 100 # Default 100 transaksi per halaman
+    page_size_query_param = 'page_size'
+    max_page_size = 1000
+
+class BankTransactionListView(ListAPIView):
+    """
+    API untuk melihat daftar transaksi dengan fitur:
+    - Pagination
+    - Filter by Bank Code
+    - Filter by Date Range
+    - Filter by Type (Debit/Credit)
+    """
+    serializer_class = BankTransactionSerializer
+    pagination_class = StandardResultsSetPagination
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = BankTransaction.objects.all()
         
-        if serializer.is_valid():
-            account_id = serializer.validated_data['bank_account_id']
-            file_obj = serializer.validated_data['file']
-            
-            # 1. Ambil objek rekening bank
-            account = get_object_or_404(BankAccount, id=account_id)
-            
-            # 2. Inisialisasi Parser (Nantinya bisa otomatis pilih berdasarkan kode bank)
-            # Untuk sekarang kita gunakan BCA Adapter sebagai default
-            parser = BCACSVParser()
-            service = TransactionParserService(parser, account)
-            
-            try:
-                # 3. Proses file
-                count = service.process_file(file_obj.read())
-                
-                return Response({
-                    "status": "success",
-                    "message": f"Berhasil memproses {count} transaksi baru.",
-                    "data": {"imported_count": count}
-                }, status=status.HTTP_201_CREATED)
-                
-            except Exception as e:
-                return Response({
-                    "status": "error",
-                    "message": str(e)
-                }, status=status.HTTP_400_BAD_REQUEST)
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        # Ambil parameter dari URL query (misal: ?bank=BCA&start_date=2023-01-01)
+        bank = self.request.query_params.get('bank')
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        tx_type = self.request.query_params.get('type') # DB atau CR
+
+        if bank:
+            queryset = queryset.filter(bank_code=bank)
+        if start_date and end_date:
+            queryset = queryset.filter(transaction_date__range=[start_date, end_date])
+        if tx_type:
+            queryset = queryset.filter(tx_type=tx_type)
+
+        return queryset

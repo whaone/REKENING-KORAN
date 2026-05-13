@@ -7,3 +7,4 @@ django-environ
 django-filter
 pandas
 openpyxl
+python-dotenv
